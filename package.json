@@ -1,0 +1,14 @@
+{
+  "name": "genome_compression",
+  "version": "1.0.0",
+  "description": "CS 222 Class Project. Genome Compression using Sequitur and Arithmetic Coding",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "M. Fahad Sheikh",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^2.9.0"
+  }
+}
