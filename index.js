@@ -1,281 +1,19 @@
 #!/usr/bin/env node
 'use strict';
+const fs = require('fs');
+const crypto = require('crypto');
 const program = require('commander');
-
-function Rule() {
-  // the guard node in the linked list of symbols that make up the rule
-  // It points forward to the first symbol in the rule, and backwards
-  // to the last symbol in the rule. Its own value points to the rule data 
-  // structure, so that symbols can find out which rule they're in
-
-  this.guard = new Symbol(this);
-  this.guard.join(this.guard);
-
-  //  referenceCount keeps track of the number of times the rule is used in the grammar
-  this.referenceCount = 0;
-
-  // this is just for numbering the rules nicely for printing; it's
-  // not essential for the algorithm
-  this.number = 0;
-
-  this.uniqueNumber = Rule.uniqueRuleNumber++;
-};
-
-Rule.uniqueRuleNumber = 1;
-
-Rule.prototype.first = function () {
-  return this.guard.getNext();
-}
-
-Rule.prototype.last = function () {
-  return this.guard.getPrev();
-}
-
-Rule.prototype.incrementReferenceCount = function () {
-  this.referenceCount++;
-};
-
-Rule.prototype.decrementReferenceCount = function () {
-  this.referenceCount--;
-};
-
-Rule.prototype.getReferenceCount = function () {
-  return this.referenceCount;
-};
-
-Rule.prototype.setNumber = function (i) {
-  this.number = i;
-};
-
-Rule.prototype.getNumber = function () {
-  return this.number;
-};
+const sequitur = require('./sequitur.js');
+const huffman = require('./huffman.js');
+var compressjs = require('compressjs');
 
 
-var digramIndex = {};
+const Rule = sequitur.Rule;
+const Symbol = sequitur.Symbol;
 
-function Symbol(value) {
-  this.next = null;
-  this.prev = null;
-  this.terminal = null;
-  this.rule = null;
-
-  // initializes a new symbol. If it is non-terminal, increments the reference
-  // count of the corresponding rule
-
-  if (typeof (value) == 'string') {
-    this.terminal = value;
-  } else if (typeof (value) == 'object') {
-    if (value.terminal) {
-      this.terminal = value.terminal;
-    } else if (value.rule) {
-      this.rule = value.rule;
-      this.rule.incrementReferenceCount();
-    } else {
-      this.rule = value;
-      this.rule.incrementReferenceCount();
-    }
-  } else {
-    console.log('Did not recognize ' + value);
-  }
-};
-
-/**
- * links two symbols together, removing any old digram from the hash table.
- */
-Symbol.prototype.join = function (right) {
-
-  if (this.next) {
-    this.deleteDigram();
-
-    // This is to deal with triples, where we only record the second
-    // pair of the overlapping digrams. When we delete the second pair,
-    // we insert the first pair into the hash table so that we don't
-    // forget about it.  e.g. abbbabcbb
-
-    if (right.prev && right.next &&
-      right.value() == right.prev.value() &&
-      right.value() == right.next.value()) {
-      digramIndex[right.hashValue()] = right;
-    }
-
-    if (this.prev && this.next &&
-      this.value() == this.next.value() &&
-      this.value() == this.prev.value()) {
-      digramIndex[this.hashValue()] = this;
-    }
-  }
-  this.next = right;
-  right.prev = this;
-};
-
-/**
- * cleans up for symbol deletion: removes hash table entry and decrements
- * rule reference count.
- */
-Symbol.prototype.delete = function () {
-  this.prev.join(this.next);
-  if (!this.isGuard()) {
-    this.deleteDigram();
-    if (this.getRule()) {
-      this.getRule().decrementReferenceCount();
-    }
-  }
-};
-
-/**
- * Removes the digram from the hash table
- */
-Symbol.prototype.deleteDigram = function () {
-  if (this.isGuard() || this.next.isGuard()) {
-    return;
-  }
-
-  if (digramIndex[this.hashValue()] == this) {
-    digramIndex[this.hashValue()] = null;
-  }
-};
-
-/**
- * Inserts a symbol after this one.
- */
-Symbol.prototype.insertAfter = function (symbol) {
-  symbol.join(this.next);
-  this.join(symbol);
-};
-
-/**
- * Returns true if this is the guard node marking the beginning and end of a
- * rule.
- */
-Symbol.prototype.isGuard = function () {
-  return this.getRule() && this.getRule().first().getPrev() == this;
-};
-
-/**
- * getRule() returns rule if a symbol is non-terminal, and null otherwise.
- */
-Symbol.prototype.getRule = function () {
-  return this.rule;
-};
-
-Symbol.prototype.getNext = function () {
-  return this.next;
-};
-
-Symbol.prototype.getPrev = function () {
-  return this.prev;
-};
-
-Symbol.prototype.getTerminal = function () {
-  return this.terminal;
-};
-
-/**
- * Checks a new digram. If it appears elsewhere, deals with it by calling
- * match(), otherwise inserts it into the hash table.
- */
-Symbol.prototype.check = function () {
-  if (this.isGuard() || this.next.isGuard()) {
-    return 0;
-  }
-
-  var match = digramIndex[this.hashValue()];
-  if (!match) {
-    digramIndex[this.hashValue()] = this;
-    return false;
-  }
-
-  if (match.getNext() != this) {
-    this.processMatch(match);
-  }
-  return true;
-};
-
-
-/**
- * This symbol is the last reference to its rule. It is deleted, and the
- * contents of the rule substituted in its place.
- */
-Symbol.prototype.expand = function () {
-  var left = this.getPrev();
-  var right = this.getNext();
-  var first = this.getRule().first();
-  var last = this.getRule().last();
-
-  if (digramIndex[this.hashValue()] == this) {
-    digramIndex[this.hashValue()] = null;
-  }
-
-  left.join(first);
-  last.join(right);
-
-  digramIndex[last.hashValue()] = last;
-};
-
-/**
- * Replace a digram with a non-terminal
- */
-Symbol.prototype.substitute = function (rule) {
-  var prev = this.prev;
-
-  prev.getNext().delete();
-  prev.getNext().delete();
-
-  prev.insertAfter(new Symbol(rule));
-
-  if (!prev.check()) {
-    prev.next.check();
-  }
-};
-
-/**
- * Deal with a matching digram.
- */
-Symbol.prototype.processMatch = function (match) {
-  var rule;
-
-  // reuse an existing rule
-  if (match.getPrev().isGuard() &&
-    match.getNext().getNext().isGuard()) {
-    rule = match.getPrev().getRule();
-    this.substitute(rule);
-  } else {
-    // create a new rule
-    rule = new Rule();
-
-    rule.last().insertAfter(new Symbol(this));
-    rule.last().insertAfter(new Symbol(this.getNext()));
-
-    match.substitute(rule);
-    this.substitute(rule);
-
-    digramIndex[rule.first().hashValue()] = rule.first();
-  }
-
-  // check for an underused rule
-  if (rule.first().getRule() &&
-    rule.first().getRule().getReferenceCount() == 1) {
-    rule.first().expand();
-  }
-}
-
-Symbol.prototype.value = function () {
-  return this.rule ? this.rule : this.terminal;
-};
-
-Symbol.prototype.stringValue = function () {
-  if (this.getRule()) {
-    return 'rule:' + this.rule.uniqueNumber;
-  } else {
-    return this.terminal;
-  }
-};
-
-Symbol.prototype.hashValue = function () {
-  return this.stringValue() + '+' +
-    this.next.stringValue();
-};
+var digramIndex = sequitur.digramIndex;
+const BinaryHeap = huffman.BinaryHeap;
+const HuffmanEncoding = huffman.HuffmanEncoding;
 
 // print the rules out
 
@@ -344,17 +82,18 @@ function printGrammar(S) {
   ruleSet[0] = S;
 
   for (var i = 0; ruleSet[i]; i++) {
-    outputArray.push(i + " &rarr; ");
+    // outputArray.push(i + " &rarr; ");
+    outputArray.push(i + ': ');
     lineLength = (i + '   ').length;
     printRule(ruleSet[i]);
 
     if (i > 0) {
-      for (var j = lineLength; j < 50; j++) {
-        outputArray.push('&nbsp;');
-      }
+      // for (var j = lineLength; j < 50; j++) {
+      //   outputArray.push('&nbsp;');
+      // }
       printRuleExpansion(ruleSet[i]);
     }
-    outputArray.push('<br>\n');
+    outputArray.push('\n');
   }
 
   return outputArray.join('');
@@ -383,16 +122,36 @@ function printHash() {
     hash += key + ': ' + digramIndex[key] + '\n';
   }
 }
-
+var dna = 'CCGGTAGACACACGTCTACCCCGCTGCTCAATGACCGGGACTAAAGAGGCGAAGATTATGGTGTGTGACCCGTTATGCTCGAGTTCGGTCAGAGCGTCATTGCGAGTAGTCGTTTGCTTTCTCAAACTCCGAGCGATTAAGCGTGACAGCCCCAGGGAACCCACAAAACGTGATCGCAGTCCATCCGATCATACACAGAAAGGAAGGTCCCCATACACCGACGCACCAGTTTACACGCCGTATGCATAAACGAGCCGCACGAACCAGAGAGCTTGAAGTGGACCTCTAGTTCCTCTACAAAGAACAGGTTGACCTGTCGCGAAGATGCCTTACCTAGATGCAATGACGGACGTATTCCTTTTGCCTCAACGGCTCCTGCTTTCGCTGAAATCCAAGACAGGCAACAGAAACCGCCTTTCGAAAGTGAGTCCTTCGTCTGTGACTAACTGTGCCAAATCGTCTTGCAAACTCCTAATCCAGTTTAACTCACCAAATTATAGCCATACAGACCCTAATTTCATATCATATCACGCGATTAGCCTCTGCTTAATTTCTGTGCTCAAGGGTTTTGGTCCGCCCGAGTGATGCTGCCAATTAGGACCATCAAATGCACTTGTTACAGGACTTCTTTTAAATACTTTCTTCCTGGGGAGTAGCGGATGTTAATGGATGTTGCCAGCTGGTATGGAAGCTAACAGCACCGGTGGGAGCCTAATGTGCCGTCTCCACCAACACAACGCTATCCGGTCGTATAATAAGATTCCGCAATGGGGTTACCAAAAGGCAGCCTTAACGATATCGGGGACTTGCGATGTACGTGCTTTGGTTCAATACATACGTGGCCCAGTAGTTATCCAATATCGGAACATCAATTGTACATCGGGCCGGCATAATCATGTCATCACGGAAGTAGCCGTAAGACAAATAATTCAATAAAGATGTCGTTTTGCTAGTTTACGTCAAGGTGTCACGCGCCATCTCTGAGCAGGTGGGCCGACGA';
+var sfinal  = '1 2 A 3 4 2 5 6 7 8 9 10 11 12 13 14 15 16 11 17 18 19 20 21 22 23 13 24 25 14 26 27 28 29 30 31 32 33 25 34 27 3 21 6 35 36 6 37 12 27 38 10 39 40 1 41 42 21 43 36 11 6 42 44 45 39 29 4 46 27 47 41 31 48 1 49 36 50 13 21 51 36 17 52 53 54 55 5 43 12 35 20 56 23 46 36 57 51 56 21 47 9 52 17 25 58 59 46 30 60 46 55 46 59 10 61 36 62 34 63 64 65 31 10 58 22 43 T 48 55 T 66 18 T 67 68 69 66 T 64 70 55 71 50 72 67 49 69 16 21 40 63 70 58 73 74 74 49 75 T 76 61 46 29 73 61 77 78 G 79 32 6 48 T 57 T 46 78 29 21 3 80 69 45 20 29 63 81 51 29 12 82 59 51 58 79 54 33 38 83 71 84 41 83 46 65 61 84 16 85 61 12 65 49 10 86 48 58 71 68 66 50 87 49 60 61 62 84 T 27 88 15 32 89 79 29 87 34 46 76 T 60 41 90 81 75 91 77 2 0 83 89 70 82 86 6 26 16 50 71 92 36 80 89 T 91 90 1 46 88 80 23 41 49 85 T 21 19 34 37 88 T 89 43 41 23 83 28 72 70 23 34 17 23 70 46 46 80 53 48 35 T 84 46 44 G A';
 program
   .version('0.0.1')
-  .description('An application for pizzas ordering')
-  .option('-p, --peppers', 'Add peppers')
-  .option('-P, --pineapple', 'Add pineapple')
-  .option('-b, --bbq', 'Add bbq sauce')
-  .option('-c, --cheese <type>', 'Add the specified type of cheese [marble]')
-  .option('-C, --no-cheese', 'You do not want any cheese')
+  .description('A DNA Compression Program')
+  .option('-i, --input <path>', 'Input File for Decoding', String)
+  .option('-o, --output <path>', 'Output File for Encoding' , String, "dns_compressed")
+  .option ('-h, --huffman', 'Huffman Encoding/Decoding')
   .parse(process.argv);
 
-console.log(start('abcabdabcabd'));
-console.log(program.args);
+// console.log(dna);
+// console.log(start(dna));
+
+if(program.huffman){
+  let wstream = fs.createWriteStream(program.output);
+  console.log('Huffman Encoding');
+
+  let algorithm = compressjs.Huffman;
+  var data = new Buffer(sfinal, 'utf8');
+  var compressed = algorithm.compressFile(data);
+  var d = new Buffer(data);
+  console.log(d);
+  wstream.write(d);
+  wstream.end();
+  // huff.inspect_encoding();
+  // console.log(huff.encoded_string);
+}
+
+
+
+// console.log(ssfinal);
+
+// console.log(program.args);

@@ -9,6 +9,7 @@
   "author": "M. Fahad Sheikh",
   "license": "ISC",
   "dependencies": {
-    "commander": "^2.9.0"
+    "commander": "^2.9.0",
+    "crypto": "0.0.3"
   }
 }
