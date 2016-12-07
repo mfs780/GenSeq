@@ -28,8 +28,7 @@ program
   .option('-a, --algorithm <path>', 'Type of Algorithm', String)
   .parse(process.argv);
 
-// console.log(dna);
-// console.log(start(dna));
+// Logic
 if (program.input && program.output) {
   if (program.algorithm == "huffman") {
     let inputData = fs.readFileSync(program.input);
@@ -49,7 +48,7 @@ if (program.input && program.output) {
     wstream.end();
   } else if (program.algorithm == "sequitur") {
 
-    let wstream, wcstream, codeArray, codeData, inputData, outputArray, outputData;
+    let wstream, wcstream, codeArray, codeData, inputData, outputArr, outputData;
     let c_data, c_code;
 
     if (program.type == "e" && program.code) {
@@ -67,12 +66,12 @@ if (program.input && program.output) {
       wstream = fs.createWriteStream(program.output + '_data');
       wcstream = fs.createWriteStream(program.output + '_code');
       inputData = fs.readFileSync(program.input);
-      outputArray = start(inputData.toString());
+      outpoutputArrutArray = start(inputData.toString());
 
-      wstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputArray.shift()))));
+      wstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputArr.shift()))));
       wstream.end();
 
-      wcstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputArray.join('\n')))));
+      wcstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputArr.join('\n')))));
       wcstream.end();
 
     } else if (program.type == "d" && program.code) {
@@ -80,7 +79,6 @@ if (program.input && program.output) {
       wstream = fs.createWriteStream(program.output + '_decompressed');
       inputData = fs.readFileSync(program.input);
       inputData = new Buffer(compressjs.Huffman.decompressFile(inputData)).toString();
-      console.log(inputData);
 
       codeData = fs.readFileSync(program.code);
       codeData = new Buffer(compressjs.Huffman.decompressFile(codeData)).toString().split('\n');
@@ -90,8 +88,6 @@ if (program.input && program.output) {
     }
   }
 }
-
-
 
 // Helper
 
