@@ -58,7 +58,7 @@ if (program.input && program.output) {
       codeData = fs.readFileSync(program.code);
       codeData = new Buffer(compressjs.Huffman.decompressFile(codeData)).toString();
       outputData = encode(codeData, inputData) + ' ';
-      
+
       wstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputData))));
       wstream.end();
     } else if (program.type == "e") {
