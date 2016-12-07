@@ -75,9 +75,9 @@ if (program.input && program.output) {
     } else if (program.type == "d" && program.code) {
       console.log('Sequitur Decoding using Code:' + program.code + ' on Input:' + program.input);
       wstream = fs.createWriteStream(program.output + '_decompressed');
+      inputData = fs.readFileSync(program.input);
       codeData = fs.readFileSync(program.code).toString().split('\n');
       outputData = decode(codeData, ' ' + inputData);
-      console.log(outputData);
       wstream.write(new Buffer(outputData));
       wstream.end();
     }
