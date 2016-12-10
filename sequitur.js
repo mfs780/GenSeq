@@ -178,27 +178,33 @@ Symbol.prototype.getTerminal = function () {
  */
 Symbol.prototype.check = function () {
   if (this.isGuard() || this.next.isGuard()) {
+    printDigram();
     return 0;
   }
 
   var thisVal = this.isComp ? this.stringValue() + "'" : this.stringValue();
   var nextVal = this.next.isComp ? this.next.stringValue() + "'" : this.next.stringValue();
   console.log('check', thisVal + '+' + nextVal);
+  
   var match = digramIndex[this.hashValue()];
   var matchi = digramIndex[this.reverseComplementValue()];
 
 
   if (!match && !matchi) {
+    console.log('No match');
     digramIndex[this.hashValue()] = this;
+    printDigram();
     return false;
   }
 
   if (match && match.getNext() != this) {
     console.log('Repeat Match', match.value() + "+" +  match.next.value());
     this.processMatch(match, false);
+    printDigram();
   } else if(matchi.getNext() != this){
     console.log('Comp Match', matchi.value() + "+" +  matchi.next.value());
     this.processMatch(matchi, true);
+    printDigram();
   } else {
     console.log('bri');
   }
@@ -243,9 +249,9 @@ Symbol.prototype.substitute = function (rule, isComp) {
   } else {
     console.log('replace with rule', newSymbol.getRule().uniqueNumber);
   }
-  console.log('Prev Check', prev.terminal + prev.next.terminal);
+  console.log('Prev Check');
   if (!prev.check()) {
-    console.log('Next Check', prev.next.terminal + prev.next.next.terminal);
+    console.log('Next Check');
     prev.next.check();
   }
 };
@@ -279,7 +285,7 @@ Symbol.prototype.processMatch = function (match, isComp) {
     }
       
     console.log('New Rule', rule.uniqueNumber + ":", printRule(rule));
-    console.log('Match Subsitute', isComp);
+    console.log('Match Subsitute', isComp, rule.first().hashValue());
 
     digramIndex[rule.first().hashValue()] = rule.first();
   }
@@ -305,8 +311,9 @@ Symbol.prototype.stringValue = function () {
 };
 
 Symbol.prototype.hashValue = function () {
-  return this.stringValue() + '+' +
-    this.next.stringValue();
+  var thisVal = this.isComp ? this.stringValue() + "'" : this.stringValue();
+  var nextVal = this.next.isComp ? this.next.stringValue() + "'" : this.next.stringValue();
+  return thisVal + '+' + nextVal;
 };
 
 Symbol.prototype.reverseComplementValue = function () {
@@ -386,4 +393,13 @@ function printTerminal(value) {
   } else {
     return value;
   }
+}
+
+function printDigram(){
+  var ok = Object.keys(digramIndex);
+  var digramOut = "";
+  for(var i = 0; i < ok.length; i++){
+    digramOut += "{" + ok[i] + "},"
+  }
+  console.log(digramOut);
 }
