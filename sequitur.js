@@ -182,6 +182,7 @@ Symbol.prototype.check = function (isNew) {
   }
 
   var match = digramIndex[this.hashValue()];
+  console.log("CHECK:", this.complementHashValue());
   if (!match) {
     console.log("Check No Match", this.hashValue());
     digramIndex[this.hashValue()] = this;
@@ -289,7 +290,27 @@ Symbol.prototype.hashValue = function () {
     this.next.stringValue();
 };
 
+Symbol.prototype.complementHashValue = function () {
+  var n = ['A', 'T', 'C', 'G'];
+  var c = ['T', 'A', 'G', 'C'];
 
+  function getValue(v){
+    var indexN = n.indexOf(v.stringValue());
+    var indexC = v.stringValue().indexOf("'");
+
+    if(indexN !== -1){
+      return c[indexN];
+    }
+    if(indexC !== -1) {
+      return v.stringValue().split("'").join('');
+    } else {
+      return v.stringValue() + "'";
+    }
+  }
+
+  return getValue(this.next) + '+' +
+    getValue(this);
+};
 
 var outputArray = [];
 //PRINT
