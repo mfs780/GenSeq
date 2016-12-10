@@ -13,6 +13,7 @@ function Rule() {
   // this is just for numbering the rules nicely for printing; it's
   // not essential for the algorithm
   this.number = 0;
+  this.isComp = false;
 
   this.uniqueNumber = Rule.uniqueRuleNumber++;
 };
@@ -55,6 +56,7 @@ function Symbol(value) {
   this.prev = null;
   this.terminal = null;
   this.rule = null;
+  this.isComp = false;
 
   // initializes a new symbol. If it is non-terminal, increments the reference
   // count of the corresponding rule
@@ -103,6 +105,9 @@ Symbol.prototype.join = function (right) {
   }
   this.next = right;
   right.prev = this;
+  // if(this.terminal && right.terminal){
+  //   console.log('['+this.terminal+','+right.terminal+']')
+  // }
 };
 
 /**
@@ -176,14 +181,26 @@ Symbol.prototype.check = function () {
     return 0;
   }
 
+  var thisVal = this.isComp ? this.stringValue() + "'" : this.stringValue();
+  var nextVal = this.next.isComp ? this.next.stringValue() + "'" : this.next.stringValue();
+  console.log('check', thisVal + '+' + nextVal);
   var match = digramIndex[this.hashValue()];
-  if (!match) {
+  var matchi = digramIndex[this.reverseComplementValue()];
+
+
+  if (!match && !matchi) {
     digramIndex[this.hashValue()] = this;
     return false;
   }
 
-  if (match.getNext() != this) {
-    this.processMatch(match);
+  if (match && match.getNext() != this) {
+    console.log('Repeat Match', match.value() + "+" +  match.next.value());
+    this.processMatch(match, false);
+  } else if(matchi.getNext() != this){
+    console.log('Comp Match', matchi.value() + "+" +  matchi.next.value());
+    this.processMatch(matchi, true);
+  } else {
+    console.log('bri');
   }
   return true;
 };
@@ -212,15 +229,23 @@ Symbol.prototype.expand = function () {
 /**
  * Replace a digram with a non-terminal
  */
-Symbol.prototype.substitute = function (rule) {
+Symbol.prototype.substitute = function (rule, isComp) {
   var prev = this.prev;
 
   prev.getNext().delete();
   prev.getNext().delete();
+  var newSymbol = new Symbol(rule);
+  prev.insertAfter(newSymbol);
 
-  prev.insertAfter(new Symbol(rule));
-
+  if(isComp){
+    newSymbol.isComp = true;
+    console.log('replace with rule', newSymbol.getRule().uniqueNumber + "'");
+  } else {
+    console.log('replace with rule', newSymbol.getRule().uniqueNumber);
+  }
+  console.log('Prev Check', prev.terminal + prev.next.terminal);
   if (!prev.check()) {
+    console.log('Next Check', prev.next.terminal + prev.next.next.terminal);
     prev.next.check();
   }
 };
@@ -228,30 +253,41 @@ Symbol.prototype.substitute = function (rule) {
 /**
  * Deal with a matching digram.
  */
-Symbol.prototype.processMatch = function (match) {
+Symbol.prototype.processMatch = function (match, isComp) {
   var rule;
 
   // reuse an existing rule
   if (match.getPrev().isGuard() &&
     match.getNext().getNext().isGuard()) {
     rule = match.getPrev().getRule();
-    this.substitute(rule);
+    console.log('Existing Rule', printRule(rule));
+    this.substitute(rule, isComp);
   } else {
     // create a new rule
     rule = new Rule();
 
-    rule.last().insertAfter(new Symbol(this));
-    rule.last().insertAfter(new Symbol(this.getNext()));
-
-    match.substitute(rule);
-    this.substitute(rule);
+    if(isComp){
+      rule.last().insertAfter(new Symbol(match));
+      rule.last().insertAfter(new Symbol(match.getNext()));
+      match.substitute(rule, false);
+      this.substitute(rule, true);
+    } else {
+      rule.last().insertAfter(new Symbol(this));
+      rule.last().insertAfter(new Symbol(this.getNext()));
+      match.substitute(rule);
+      this.substitute(rule);
+    }
+      
+    console.log('New Rule', rule.uniqueNumber + ":", printRule(rule));
+    console.log('Match Subsitute', isComp);
 
     digramIndex[rule.first().hashValue()] = rule.first();
   }
 
   // check for an underused rule
+  console.log('Check Unused');
   if (rule.first().getRule() &&
-    rule.first().getRule().getReferenceCount() == 1) {
+    rule.first().getRule().getReferenceCount() == 10) {
     rule.first().expand();
   }
 }
@@ -273,6 +309,81 @@ Symbol.prototype.hashValue = function () {
     this.next.stringValue();
 };
 
+Symbol.prototype.reverseComplementValue = function () {
+  var getComplement = function(value){
+    var v = ['A', 'T', 'C', 'G'];
+    var c = ['T', 'A', 'G', 'C'];
+    
+    var s = v.indexOf(value.stringValue());
+    if(s !== -1){
+      s = c[s];
+    } else {
+      if(value.isComp){
+        s = value.stringValue();
+      } else {
+        s = value.stringValue() + "'";
+      }
+    }
+    return s;
+  }
+  // console.log('comp', getComplement(this.next) + '+' + getComplement(this));
+  return getComplement(this.next) + '+' + getComplement(this);
+}
+
 module.exports.Rule = Rule;
 module.exports.Symbol = Symbol;
 module.exports.digramIndex = digramIndex;
+
+
+var ruleSet = [];
+
+/**
+ * @param {Rule} rule
+ */
+function printRule(rule) {
+  var output = "";
+  for (var symbol = rule.first(); !symbol.isGuard(); symbol = symbol.getNext()) {
+    if (symbol.getRule()) {
+      var ruleNumber;
+
+      if (ruleSet[symbol.getRule().getNumber()] == symbol.getRule()) {
+        ruleNumber = symbol.getRule().getNumber();
+      } else {
+        ruleNumber = ruleSet.length;
+        symbol.getRule().setNumber(ruleSet.length);
+        ruleSet.push(symbol.getRule());
+      }
+      if(symbol.isComp){
+        output += ruleNumber + "'" + ' ';
+      } else {
+        output += ruleNumber + ' ';
+      }
+      
+      // lineLength += (ruleNumber + ' ').length;
+    } else {
+      output += printTerminal(symbol.value());
+      output += ' ';
+      // lineLength += 2;
+    }
+  }
+  return output;
+}
+
+function printTerminal(value) {
+  if (value == ' ') {
+    //    return '\u2423'; // open box (typographic blank indicator).
+    return '_'; // open box (typographic blank indicator).
+  } else if (value == '\n') {
+    return '&crarr;';
+  } else if (value == '\t') {
+    return '&#8677;';
+  } else if (value == '\\' ||
+    value == '(' ||
+    value == ')' ||
+    value == '_' ||
+    value.match(/[0-9]/)) {
+    return ('\\' + symbol.value());
+  } else {
+    return value;
+  }
+}

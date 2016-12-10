@@ -35,7 +35,7 @@ if (program.input && program.output) {
     let wstream, outputData;
 
     if (program.type == "e") {
-      console.log('Huffman Encoding', program.input, inputData);
+      console.log('Huffman Encoding', program.input);
       wstream = fs.createWriteStream(program.output + "_compressed");
       outputData = compressjs.Huffman.compressFile(inputData);
     } else if (program.type == "d") {
@@ -58,6 +58,7 @@ if (program.input && program.output) {
       codeData = fs.readFileSync(program.code);
       codeData = new Buffer(compressjs.Huffman.decompressFile(codeData)).toString();
       outputData = encode(codeData, inputData) + ' ';
+      // outputData = outputData.split(' ').join('');
 
       wstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputData))));
       wstream.end();
@@ -66,7 +67,7 @@ if (program.input && program.output) {
       wstream = fs.createWriteStream(program.output + '_data');
       wcstream = fs.createWriteStream(program.output + '_code');
       inputData = fs.readFileSync(program.input);
-      outpoutputArrutArray = start(inputData.toString());
+      outputArr = start(inputData.toString());
 
       wstream.write(new Buffer(compressjs.Huffman.compressFile(new Buffer(outputArr.shift()))));
       wstream.end();
@@ -86,8 +87,29 @@ if (program.input && program.output) {
       wstream.write(new Buffer(outputData));
       wstream.end();
     }
+  } else if(program.algorithm == "rand"){
+    let inputData = fs.readFileSync(program.input);
+    let wstream, outputData;
+    console.log('Creating 0.1% Change', program.input);
+    wstream = fs.createWriteStream(program.output + "_rand.txt");
+    inputData = inputData.toString();
+    var nuc = ['A', 'B', 'C', 'D']
+    inputData = inputData.split('');
+    for(var i = 0; i < inputData.length; i++){
+      let r = Math.floor(Math.random() * 1000) + 1;
+      if (r === 1000){
+        let n = Math.floor(Math.random() * 4) + 1;
+        inputData[i] = nuc[n-1];
+      }
+    }
+    inputData = inputData.join('');
+
+    wstream.write(new Buffer(inputData));
+    wstream.end();
   }
 }
+console.log('AGCTGCAGCT');
+console.log(start('AGCTGCAGCT'));
 
 // Helper
 
@@ -153,8 +175,11 @@ function printRule(rule) {
         symbol.getRule().setNumber(ruleSet.length);
         ruleSet.push(symbol.getRule());
       }
-
-      outputArray.push(ruleNumber + ' ');
+      if(symbol.isComp){
+        outputArray.push(ruleNumber + "'" +  ' ');
+      } else {
+        outputArray.push(ruleNumber + ' ');
+      }
       lineLength += (ruleNumber + ' ').length;
     } else {
       outputArray.push(printTerminal(symbol.value()));
@@ -229,7 +254,10 @@ function start(seq) {
   while (input.length) {
     S.last().insertAfter(new Symbol(input.shift()));
     S.last().getPrev().check();
+    console.log('after', printGrammar(S)[0])
+    console.log("================");
   }
+  // console.log(S);
   return printGrammar(S);
 }
 
