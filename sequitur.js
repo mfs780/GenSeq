@@ -15,6 +15,9 @@ function Rule() {
   this.number = 0;
 
   this.uniqueNumber = Rule.uniqueRuleNumber++;
+
+  this.isComp = false;
+  this.isCompOf = null;
 };
 
 Rule.uniqueRuleNumber = 1;
@@ -182,18 +185,22 @@ Symbol.prototype.check = function (isNew) {
   }
 
   var match = digramIndex[this.hashValue()];
-  console.log("CHECK:", this.complementHashValue());
-  if (!match) {
+  var matchc = digramIndex[this.complementHashValue()];
+  if (!match && !matchc) {
     console.log("Check No Match", this.hashValue());
     digramIndex[this.hashValue()] = this;
     console.log("No Match Add Digram:", printDigrams());
     return false;
   }
 
-  if (match.getNext() != this) {
+  if (match && match.getNext() != this) {
     console.log("Check Match:", match.hashValue());
     this.processMatch(match);
+  } else if(matchc && matchc.getNext()){
+    console.log("Check RC Match for "+this.hashValue()+":", matchc.hashValue());
+    this.processMatchC(matchc);
   }
+
   return true;
 };
 
@@ -223,7 +230,7 @@ Symbol.prototype.expand = function () {
  */
 Symbol.prototype.substitute = function (rule, out) {
   console.log("**")
-  console.log("Subsitute " + out, this.hashValue() + " with " + rule.uniqueNumber);
+  console.log("Subsitute " + out, this.hashValue() + " with " + getRuleUniqueNumber(rule));
   var prev = this.prev;
 
   prev.getNext().delete();
@@ -231,9 +238,9 @@ Symbol.prototype.substitute = function (rule, out) {
 
   prev.insertAfter(new Symbol(rule));
 
-  console.log("Prev Check");
+  console.log("Prev Check for: ", this.hashValue());
   if (!prev.check()) {
-    console.log("Next Check");
+    console.log("Next Check for: ", this.hashValue());
     prev.next.check();
   }
 };
@@ -249,7 +256,7 @@ Symbol.prototype.processMatch = function (match) {
     match.getNext().getNext().isGuard()) {
       
     rule = match.getPrev().getRule();
-    console.log("Process: Existing Rule " + rule.uniqueNumber + ":", printGrammar(rule));
+    console.log("Process: Existing Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
     this.substitute(rule, "This");
   } else {
     // create a new rule
@@ -257,7 +264,7 @@ Symbol.prototype.processMatch = function (match) {
 
     rule.last().insertAfter(new Symbol(this));
     rule.last().insertAfter(new Symbol(this.getNext()));
-    console.log("Process: New Rule " + rule.uniqueNumber + ":", printGrammar(rule));
+    console.log("Process: New Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
 
 
     match.substitute(rule, "Match");
@@ -273,13 +280,58 @@ Symbol.prototype.processMatch = function (match) {
   }
 }
 
+/**
+ * Deal with a matching complement digram.
+ */
+Symbol.prototype.processMatchC = function (match) {
+  var rule;
+
+  // reuse an existing rule
+  if (match.getPrev().isGuard() &&
+    match.getNext().getNext().isGuard()) {
+      
+    rule = match.getPrev().getRule();
+    console.log("Process: Existing Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+    this.substitute(rule, "This");
+  } else {
+    // create a new rule
+    rule = new Rule();
+
+    rule.last().insertAfter(new Symbol(match));
+    rule.last().insertAfter(new Symbol(match.getNext()));
+    console.log("Process: New Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+
+    comprule = new Rule();
+
+    comprule.last().insertAfter(new Symbol(this));
+    comprule.last().insertAfter(new Symbol(this.getNext()));
+    comprule.uniqueNumber = rule.uniqueNumber;
+    comprule.isComp = true;
+    comprule.isCompOf = rule;
+    console.log("Process: New Comp Rule " + getRuleUniqueNumber(comprule) + ":", printGrammar(comprule));
+
+
+    match.substitute(rule, "Match");
+    this.substitute(comprule, "This");
+
+    digramIndex[rule.first().hashValue()] = rule.first();
+    digramIndex[comprule.first().hashValue()] = comprule.first();
+  }
+
+  // check for an underused rule
+  if (rule.first().getRule() &&
+    rule.first().getRule().getReferenceCount() == 1) {
+    rule.first().expand();
+  }
+}
+
 Symbol.prototype.value = function () {
   return this.rule ? this.rule : this.terminal;
 };
 
 Symbol.prototype.stringValue = function () {
   if (this.getRule()) {
-    return 'rule:' + this.rule.uniqueNumber;
+    return 'rule:' + getRuleUniqueNumber(this.rule);
   } else {
     return this.terminal;
   }
@@ -391,12 +443,16 @@ function printGrammar(S) {
 }
 
 function printDigrams(){
-  var output = "";
-  var keys = Object.keys(digramIndex);
-  for(var i = 0; i < keys.length; i ++){
-    output += "{"+keys[i]+"},"
-  }
-  return output;
+  // var output = "";
+  // var keys = Object.keys(digramIndex);
+  // for(var i = 0; i < keys.length; i ++){
+  //   output += "{"+keys[i]+"},"
+  // }
+  // return output;
+}
+
+function getRuleUniqueNumber (rule) {
+  return rule.isComp ? rule.uniqueNumber + "'" : rule.uniqueNumber; 
 }
 
 module.exports.Rule = Rule;
