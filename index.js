@@ -175,11 +175,8 @@ function printRule(rule) {
         symbol.getRule().setNumber(ruleSet.length);
         ruleSet.push(symbol.getRule());
       }
-      if(symbol.isComp){
-        outputArray.push(ruleNumber + "'" +  ' ');
-      } else {
-        outputArray.push(ruleNumber + ' ');
-      }
+
+      outputArray.push(ruleNumber + ' ');
       lineLength += (ruleNumber + ' ').length;
     } else {
       outputArray.push(printTerminal(symbol.value()));
@@ -252,10 +249,12 @@ function start(seq) {
   }
 
   while (input.length) {
-    S.last().insertAfter(new Symbol(input.shift()));
-    S.last().getPrev().check();
+    var symb = input.shift();
+    console.log("Adding Symbol",printGrammar(S)[0] + symb)
+    S.last().insertAfter(new Symbol(symb));
+    S.last().getPrev().check(true);
     console.log('after', printGrammar(S)[0])
-    console.log("================");
+    console.log('============');
   }
   // console.log(S);
   return printGrammar(S);
