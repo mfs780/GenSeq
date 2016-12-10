@@ -169,7 +169,11 @@ function printRule(rule) {
       var ruleNumber;
 
       if (ruleSet[symbol.getRule().getNumber()] == symbol.getRule()) {
-        ruleNumber = symbol.getRule().getNumber();
+        if(symbol.isComp){
+          ruleNumber = symbol.getRule().getNumber() + "'";
+        } else {
+          ruleNumber = symbol.getRule().getNumber();
+        }
       } else {
         ruleNumber = ruleSet.length;
         symbol.getRule().setNumber(ruleSet.length);

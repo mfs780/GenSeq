@@ -58,6 +58,7 @@ function Symbol(value) {
   this.prev = null;
   this.terminal = null;
   this.rule = null;
+  this.isComp = false;
 
   // initializes a new symbol. If it is non-terminal, increments the reference
   // count of the corresponding rule
@@ -198,7 +199,7 @@ Symbol.prototype.check = function (isNew) {
     this.processMatch(match);
   } else if(matchc && matchc.getNext()){
     console.log("Check RC Match for "+this.hashValue()+":", matchc.hashValue());
-    this.processMatchC(matchc);
+    this.processMatchB(matchc);
   }
 
   return true;
@@ -228,15 +229,21 @@ Symbol.prototype.expand = function () {
 /**
  * Replace a digram with a non-terminal
  */
-Symbol.prototype.substitute = function (rule, out) {
-  console.log("**")
-  console.log("Subsitute " + out, this.hashValue() + " with " + getRuleUniqueNumber(rule));
+Symbol.prototype.substitute = function (rule, out, isComp) {
   var prev = this.prev;
 
   prev.getNext().delete();
   prev.getNext().delete();
 
-  prev.insertAfter(new Symbol(rule));
+  var nrule = new Symbol(rule);
+  if(isComp){
+    nrule.isComp = true;
+  }
+
+  console.log("**")
+  console.log("Subsitute " + out, this.hashValue() + " with " + getRuleUniqueNumber(nrule, rule));
+
+  prev.insertAfter(nrule);
 
   console.log("Prev Check for: ", this.hashValue());
   if (!prev.check()) {
@@ -256,7 +263,8 @@ Symbol.prototype.processMatch = function (match) {
     match.getNext().getNext().isGuard()) {
       
     rule = match.getPrev().getRule();
-    console.log("Process: Existing Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+    console.log("Process: Existing Rule ");
+    // console.log("Process: Existing Rule " + getRuleUniqueNumber(this, rule) + ":", printGrammar(this, rule));
     this.substitute(rule, "This");
   } else {
     // create a new rule
@@ -264,7 +272,7 @@ Symbol.prototype.processMatch = function (match) {
 
     rule.last().insertAfter(new Symbol(this));
     rule.last().insertAfter(new Symbol(this.getNext()));
-    console.log("Process: New Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+    console.log("Process: New Rule " + getRuleUniqueNumber(this, rule) + ":", printGrammar(this, rule));
 
 
     match.substitute(rule, "Match");
@@ -291,7 +299,7 @@ Symbol.prototype.processMatchC = function (match) {
     match.getNext().getNext().isGuard()) {
       
     rule = match.getPrev().getRule();
-    console.log("Process: Existing Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+    console.log("Process: Existing Rule " + getRuleUniqueNumber(this, rule) + ":", printGrammar(rule));
     this.substitute(rule, "This");
   } else {
     // create a new rule
@@ -299,7 +307,7 @@ Symbol.prototype.processMatchC = function (match) {
 
     rule.last().insertAfter(new Symbol(match));
     rule.last().insertAfter(new Symbol(match.getNext()));
-    console.log("Process: New Rule " + getRuleUniqueNumber(rule) + ":", printGrammar(rule));
+    console.log("Process: New Rule " + getRuleUniqueNumber(this, rule) + ":", printGrammar(rule));
 
     comprule = new Rule();
 
@@ -308,7 +316,7 @@ Symbol.prototype.processMatchC = function (match) {
     comprule.uniqueNumber = rule.uniqueNumber;
     comprule.isComp = true;
     comprule.isCompOf = rule;
-    console.log("Process: New Comp Rule " + getRuleUniqueNumber(comprule) + ":", printGrammar(comprule));
+    console.log("Process: New Comp Rule " + getRuleUniqueNumber(this, comprule) + ":", printGrammar(comprule));
 
 
     match.substitute(rule, "Match");
@@ -325,13 +333,63 @@ Symbol.prototype.processMatchC = function (match) {
   }
 }
 
+Symbol.prototype.processMatchB = function (match) {
+  var rule;
+
+  // reuse an existing rule
+  if (match.getPrev().isGuard() &&
+    match.getNext().getNext().isGuard()) {
+      
+    rule = match.getPrev().getRule();
+    console.log("Process: Existing Rule " + getRuleUniqueNumber(match.getPrev(), rule) + ":", printGrammar(rule));
+    this.substitute(rule, "This", true);
+  } else {
+    // create a new rule
+    rule = new Rule();
+
+    if(match.isComp){
+      this.isComp = true;
+    }
+
+    console.log('Rule is Comp:', match.isComp);
+    var thisSym = new Symbol(match);
+    if(match.isComp){
+      thisSym.isComp = true;
+    }
+    rule.last().insertAfter(thisSym);
+
+    console.log('Rule is Comp:', match.getNext().isComp);
+    var nextSym = new Symbol(match.getNext());
+    if(match.getNext().isComp){
+      nextSym.isComp = true;
+    }
+    rule.last().insertAfter(nextSym);
+
+    // rule.last().insertAfter(thisSym);
+    // rule.last().insertAfter(nextSym);
+    console.log("Process: New Rule " + getRuleUniqueNumber(this, rule) + ":", printGrammar(rule));
+
+    match.substitute(rule, "Match");
+    this.substitute(rule, "This", true);
+
+    digramIndex[rule.first().hashValue()] = rule.first();
+    digramIndex[rule.first().complementHashValue()] = rule.first();
+  }
+
+  // check for an underused rule
+  if (rule.first().getRule() &&
+    rule.first().getRule().getReferenceCount() == 1) {
+    rule.first().expand();
+  }
+}
+
 Symbol.prototype.value = function () {
   return this.rule ? this.rule : this.terminal;
 };
 
 Symbol.prototype.stringValue = function () {
   if (this.getRule()) {
-    return 'rule:' + getRuleUniqueNumber(this.rule);
+    return 'rule:' + getRuleUniqueNumber(this, this.rule);
   } else {
     return this.terminal;
   }
@@ -372,7 +430,11 @@ function printRule(rule) {
       var ruleNumber;
 
       if (ruleSet[symbol.getRule().getNumber()] == symbol.getRule()) {
-        ruleNumber = symbol.getRule().getNumber();
+        if(symbol.isComp){
+          ruleNumber = symbol.getRule().getNumber() + "'";
+        } else {
+          ruleNumber = symbol.getRule().getNumber();
+        }
       } else {
         ruleNumber = ruleSet.length;
         symbol.getRule().setNumber(ruleSet.length);
@@ -451,8 +513,8 @@ function printDigrams(){
   // return output;
 }
 
-function getRuleUniqueNumber (rule) {
-  return rule.isComp ? rule.uniqueNumber + "'" : rule.uniqueNumber; 
+function getRuleUniqueNumber (t, rule) {
+  return t.isComp ? rule.uniqueNumber + "'" : rule.uniqueNumber; 
 }
 
 module.exports.Rule = Rule;
